@@ -1,0 +1,50 @@
+// ============================================================
+// customer_transform.xfr
+// Ab Initio Transform: REFORMAT component
+// Maps to SQL equivalent: SELECT with CASE expressions
+// Source: CUST_FEED_INPUT -> Target: CUST_FEED_OUTPUT
+// Complexity: MEDIUM
+// AI Analysis Note: Reformat = SELECT/CASE in relational SQL
+// ============================================================
+
+transform reformat_customer_record(
+    in  CUST_FEED_INPUT  in_rec;
+    out CUST_FEED_OUTPUT out_rec
+) {
+
+    // customer_id: pass through unchanged
+    out_rec.customer_id := in_rec.customer_id;
+
+    // Name normalisation: UPPER-CASE trim
+    // SQL equivalent: UPPER(TRIM(first_name))
+    out_rec.first_name := upper(trim(in_rec.first_name));
+    out_rec.last_name  := upper(trim(in_rec.last_name));
+
+    out_rec.date_of_birth := in_rec.date_of_birth;
+
+    // Email: lower-case normalisation
+    // SQL equivalent: LOWER(TRIM(email))
+    out_rec.email := lower(trim(in_rec.email));
+    out_rec.phone := trim(in_rec.phone);
+
+    // Address passthrough
+    out_rec.address_line1 := in_rec.address_line1;
+    out_rec.city          := upper(trim(in_rec.city));
+
+    // Country code: default to 'GBR' if missing
+    // SQL equivalent: CASE WHEN country_code IS NULL THEN 'GBR' ELSE country_code END
+    out_rec.country_code :=
+        if (is_null(in_rec.country_code) || length(trim(in_rec.country_code)) = 0)
+            then "GBR"
+            else upper(trim(in_rec.country_code));
+
+    out_rec.source_system := in_rec.source_system;
+    out_rec.load_date     := in_rec.feed_date;
+
+    // Rec status: NEW/UPDATE -> 'N', DELETE -> skip (handled by filter)
+    // SQL equivalent: CASE WHEN record_type IN ('NEW','UPDATE') THEN 'N' END
+    out_rec.rec_status :=
+        if (in_rec.record_type = "DELETE")
+            then "D"
+            else "N";
+}

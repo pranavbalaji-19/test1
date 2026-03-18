@@ -1,0 +1,92 @@
+// ============================================================
+// settlement_agg.xfr
+// Ab Initio Transform: REFORMAT + ROLLUP combined graph
+// Maps to SQL: SELECT with CASE + GROUP BY aggregation
+// Source: SETTLEMENT_FEED_INPUT -> Target: SETTLEMENT_COUNTRY_AGG
+// Complexity: MEDIUM
+// ============================================================
+
+// DML reference for input record layout
+// (defined in settlement_feed.dml - inline here for clarity)
+//
+// record SETTLEMENT_FEED_INPUT {
+//     string(30)    settlement_id;
+//     string(30)    policy_id;
+//     date          settlement_date;
+//     decimal(15,2) amount;
+//     string(3)     currency_code;
+//     string(20)    settlement_type;   // CLAIM, PREMIUM, REFUND
+//     string(3)     country_code;
+// }
+
+// -------------------------------------------------------
+// STAGE 1: REFORMAT - currency normalisation + type mapping
+// SQL equivalent: SELECT with CASE WHEN transformations
+// -------------------------------------------------------
+transform reformat_settlement(
+    in  SETTLEMENT_FEED_INPUT  in_rec;
+    out SETTLEMENT_NORMALISED  out_rec
+) {
+    out_rec.settlement_id   := in_rec.settlement_id;
+    out_rec.policy_id       := in_rec.policy_id;
+    out_rec.settlement_date := in_rec.settlement_date;
+    out_rec.country_code    := in_rec.country_code;
+
+    // Normalise amount to GBP base
+    // SQL equivalent:
+    //   CASE currency_code
+    //     WHEN 'USD' THEN amount * 0.79
+    //     WHEN 'EUR' THEN amount * 0.86
+    //     ELSE amount
+    //   END
+    out_rec.normalised_amount :=
+        if      (in_rec.currency_code = "USD") then in_rec.amount * decimal(0.79)
+        else if (in_rec.currency_code = "EUR") then in_rec.amount * decimal(0.86)
+        else in_rec.amount;
+
+    // Map settlement type to category code
+    // SQL equivalent: CASE WHEN settlement_type = 'CLAIM' THEN 'C' ...
+    out_rec.type_category :=
+        if      (in_rec.settlement_type = "CLAIM")   then "C"
+        else if (in_rec.settlement_type = "PREMIUM")  then "P"
+        else if (in_rec.settlement_type = "REFUND")   then "R"
+        else "O";   // Other
+}
+
+// -------------------------------------------------------
+// STAGE 2: ROLLUP - aggregate by country + type_category
+// SQL equivalent:
+//   SELECT country_code, type_category,
+//          COUNT(*) AS count, SUM(normalised_amount) AS total
+//   FROM   settlement_normalised
+//   GROUP  BY country_code, type_category
+// -------------------------------------------------------
+rollup_key {
+    country_code;
+    type_category;
+    settlement_date;
+}
+
+initialize() {
+    settlement_count := 0;
+    total_amount     := decimal(0);
+    max_amount       := decimal(0);
+}
+
+accumulate(in SETTLEMENT_NORMALISED rec) {
+    settlement_count += 1;
+    total_amount     += rec.normalised_amount;
+
+    if (rec.normalised_amount > max_amount) {
+        max_amount := rec.normalised_amount;
+    }
+}
+
+output(out SETTLEMENT_COUNTRY_AGG agg_rec) {
+    agg_rec.country_code      := country_code;
+    agg_rec.type_category     := type_category;
+    agg_rec.report_date       := settlement_date;
+    agg_rec.settlement_count  := settlement_count;
+    agg_rec.total_amount_gbp  := total_amount;
+    agg_rec.max_amount_gbp    := max_amount;
+}

@@ -1,0 +1,69 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- ============================================================
+     UC4 / Automic Job Export
+     Job Name    : JOB_CUST_DAILY_LOAD
+     Description : Triggers load_customer_daily.ksh
+                   First job in the daily chain.
+     Successor   : JOB_POLICY_DAILY_LOAD (triggers on SUCCESS)
+     Trigger     : Time-based - daily at 01:00 UTC
+     Complexity  : MEDIUM (orchestration dependency mapping)
+     ============================================================ -->
+<uc4export version="12.3.0" exported="2024-01-15T06:00:00Z">
+
+  <jobp name="JOB_CUST_DAILY_LOAD" type="JOBS">
+    <header>
+      <title>Customer Daily Staging and Dimension Load</title>
+      <description>Loads customer feed into CUST_RAW_STG and calls pkg_customer_hist SCD2 historization.</description>
+      <owner>DW_TEAM</owner>
+      <client>100</client>
+      <created>2022-03-10</created>
+      <modified>2024-01-10</modified>
+    </header>
+
+    <trigger>
+      <type>TIME</type>
+      <schedule>DAILY</schedule>
+      <start_time>01:00</start_time>
+      <timezone>UTC</timezone>
+      <enabled>TRUE</enabled>
+      <calendar>BANK_WORKING_DAYS</calendar>
+    </trigger>
+
+    <runtime>
+      <agent>AGENT_DW_PROD_01</agent>
+      <login>DW_ORACLE_LOGIN</login>
+      <script_type>KSH</script_type>
+      <script_path>/opt/datawarehouse/shell_scripts/load_customer_daily.ksh</script_path>
+      <script_params>&amp;UC4_DATE_YYYYMMDD &amp;SOURCE_SYSTEM PROD</script_params>
+    </runtime>
+
+    <variables>
+      <variable name="UC4_DATE_YYYYMMDD" value="&amp;SYSDATE(YYYY-MM-DD)" type="dynamic"/>
+      <variable name="SOURCE_SYSTEM"     value="CORE_BANKING"             type="static"/>
+      <variable name="ENV"               value="PROD"                     type="static"/>
+    </variables>
+
+    <predecessors>
+      <!-- No predecessor: this is the first job in the chain -->
+    </predecessors>
+
+    <successors>
+      <successor>
+        <job_name>JOB_POLICY_DAILY_LOAD</job_name>
+        <condition>EXIT_CODE = 0</condition>
+        <trigger_type>ON_SUCCESS</trigger_type>
+      </successor>
+    </successors>
+
+    <error_handling>
+      <on_failure>
+        <action>SEND_NOTIFICATION</action>
+        <notification_group>DW_OPS_ALERTS</notification_group>
+        <retry_count>2</retry_count>
+        <retry_wait_minutes>15</retry_wait_minutes>
+      </on_failure>
+    </error_handling>
+
+  </jobp>
+
+</uc4export>

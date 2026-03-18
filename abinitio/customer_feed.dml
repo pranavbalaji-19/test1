@@ -1,0 +1,50 @@
+// ============================================================
+// customer_feed.dml
+// Ab Initio DML Schema Definition
+// Defines the record layout for customer feed input and output
+// Used by: customer_transform.xfr, customer_rollup.xfr
+// Complexity: MEDIUM (Ab Initio component - maps to SQL schema)
+// ============================================================
+
+// Input record: raw customer feed from source system
+record CUST_FEED_INPUT {
+    string(20)  customer_id;
+    string(100) first_name;
+    string(100) last_name;
+    date("%Y-%m-%d") date_of_birth;
+    string(200) email;
+    string(20)  phone;
+    string(200) address_line1;
+    string(100) city;
+    string(3)   country_code;
+    string(50)  source_system;
+    date("%Y-%m-%d") feed_date;
+    string(20)  record_type;       // NEW, UPDATE, DELETE
+    decimal(3)  data_quality_score;
+}
+
+// Output record: cleansed customer record for staging
+record CUST_FEED_OUTPUT {
+    string(20)  customer_id;
+    string(100) first_name;
+    string(100) last_name;
+    date("%Y-%m-%d") date_of_birth;
+    string(200) email;
+    string(20)  phone;
+    string(200) address_line1;
+    string(100) city;
+    string(3)   country_code;
+    string(50)  source_system;
+    date("%Y-%m-%d") load_date;
+    string(1)   rec_status;        // N=New, P=Processed
+}
+
+// Aggregation record: country-level customer count
+record CUST_COUNTRY_AGG {
+    string(3)   country_code;
+    date("%Y-%m-%d") feed_date;
+    integer     total_customers;
+    integer     new_customers;
+    integer     updated_customers;
+    decimal(5,2) avg_quality_score;
+}

@@ -1,0 +1,68 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- ============================================================
+     UC4 / Automic Job Export
+     Job Name    : JOB_EOD_REPORTING
+     Description : End-of-day regulatory report generation.
+                   Final job in the daily pipeline chain.
+     Predecessor : JOB_SETTLEMENT_DAILY_LOAD (EXIT_CODE=0 only)
+     Successor   : None (terminal node)
+     Complexity  : LOW
+     ============================================================ -->
+<uc4export version="12.3.0" exported="2024-01-15T06:00:00Z">
+
+  <jobp name="JOB_EOD_REPORTING" type="JOBS">
+    <header>
+      <title>End-of-Day Regulatory Reporting</title>
+      <description>
+        Calls pkg_regulatory_report.generate_daily_report and runs
+        generate_daily_summary.sql to produce REGULATORY_REPORT_AGG.
+        Terminal node in the daily pipeline DAG.
+      </description>
+      <owner>DW_REPORTING_TEAM</owner>
+      <client>100</client>
+    </header>
+
+    <trigger>
+      <type>EVENT</type>
+      <event_source>JOB_SETTLEMENT_DAILY_LOAD</event_source>
+      <event_condition>EXIT_CODE = 0</event_condition>
+      <enabled>TRUE</enabled>
+    </trigger>
+
+    <runtime>
+      <agent>AGENT_DW_PROD_01</agent>
+      <login>DW_ORACLE_LOGIN</login>
+      <script_type>KSH</script_type>
+      <script_path>/opt/datawarehouse/shell_scripts/run_eod_reporting.ksh</script_path>
+      <script_params>&amp;UC4_DATE_YYYYMMDD PROD</script_params>
+    </runtime>
+
+    <variables>
+      <variable name="UC4_DATE_YYYYMMDD" value="&amp;SYSDATE(YYYY-MM-DD)" type="dynamic"/>
+      <variable name="ENV"               value="PROD"                     type="static"/>
+    </variables>
+
+    <predecessors>
+      <predecessor>
+        <job_name>JOB_SETTLEMENT_DAILY_LOAD</job_name>
+        <required_exit_code>0</required_exit_code>
+        <dependency_type>HARD</dependency_type>
+      </predecessor>
+    </predecessors>
+
+    <successors>
+      <!-- Terminal node: no successors -->
+    </successors>
+
+    <error_handling>
+      <on_failure>
+        <action>SEND_NOTIFICATION</action>
+        <notification_group>DW_REPORTING_ALERTS</notification_group>
+        <retry_count>1</retry_count>
+        <retry_wait_minutes>10</retry_wait_minutes>
+      </on_failure>
+    </error_handling>
+
+  </jobp>
+
+</uc4export>

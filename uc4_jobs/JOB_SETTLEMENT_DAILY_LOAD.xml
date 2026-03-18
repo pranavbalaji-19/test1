@@ -1,0 +1,85 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- ============================================================
+     UC4 / Automic Job Export
+     Job Name    : JOB_SETTLEMENT_DAILY_LOAD
+     Description : Triggers load_settlement_daily.ksh
+                   Third job in daily chain.
+     Predecessor : JOB_POLICY_DAILY_LOAD (must succeed)
+     Successor   : JOB_EOD_REPORTING (ONLY if EXIT_CODE=0)
+                   JOB_FAILURE_ALERT (if EXIT_CODE != 0)
+     Trigger     : Triggered by JOB_POLICY_DAILY_LOAD success
+     Complexity  : MEDIUM - conditional successor branching
+     ============================================================ -->
+<uc4export version="12.3.0" exported="2024-01-15T06:00:00Z">
+
+  <jobp name="JOB_SETTLEMENT_DAILY_LOAD" type="JOBS">
+    <header>
+      <title>Settlement Daily Load and Reconciliation</title>
+      <description>
+        Loads SETTLEMENT_STG from feed, joins against CUST and POLICY dims,
+        loads SETTLEMENT_FACT, and reconciles amounts. Only triggers EOD
+        reporting if reconciliation passes (exit code 0).
+      </description>
+      <owner>DW_TEAM</owner>
+      <client>100</client>
+    </header>
+
+    <trigger>
+      <type>EVENT</type>
+      <event_source>JOB_POLICY_DAILY_LOAD</event_source>
+      <event_condition>EXIT_CODE = 0</event_condition>
+      <enabled>TRUE</enabled>
+    </trigger>
+
+    <runtime>
+      <agent>AGENT_DW_PROD_01</agent>
+      <login>DW_ORACLE_LOGIN</login>
+      <script_type>KSH</script_type>
+      <script_path>/opt/datawarehouse/shell_scripts/load_settlement_daily.ksh</script_path>
+      <script_params>&amp;UC4_DATE_YYYYMMDD &amp;CURRENCY_CODE PROD</script_params>
+    </runtime>
+
+    <variables>
+      <variable name="UC4_DATE_YYYYMMDD" value="&amp;SYSDATE(YYYY-MM-DD)" type="dynamic"/>
+      <variable name="CURRENCY_CODE"     value="GBP"                      type="static"/>
+      <variable name="ENV"               value="PROD"                     type="static"/>
+    </variables>
+
+    <predecessors>
+      <predecessor>
+        <job_name>JOB_POLICY_DAILY_LOAD</job_name>
+        <required_exit_code>0</required_exit_code>
+        <dependency_type>HARD</dependency_type>
+      </predecessor>
+    </predecessors>
+
+    <!-- CONDITIONAL SUCCESSOR BRANCHING -->
+    <!-- Job C only triggers EOD Reporting if reconciliation passed (exit 0) -->
+    <successors>
+      <successor>
+        <job_name>JOB_EOD_REPORTING</job_name>
+        <condition>EXIT_CODE = 0</condition>
+        <trigger_type>CONDITIONAL</trigger_type>
+        <description>Trigger EOD reporting only on clean reconciliation</description>
+      </successor>
+      <successor>
+        <job_name>JOB_SETTLEMENT_FAILURE_ALERT</job_name>
+        <condition>EXIT_CODE != 0</condition>
+        <trigger_type>CONDITIONAL</trigger_type>
+        <description>Raise ops alert if reconciliation fails</description>
+      </successor>
+    </successors>
+
+    <error_handling>
+      <on_failure>
+        <action>SEND_NOTIFICATION</action>
+        <notification_group>DW_FINANCE_ALERTS</notification_group>
+        <retry_count>0</retry_count>
+        <abort_workflow>FALSE</abort_workflow>
+        <!-- Do not abort: allow failure branch to run alert job -->
+      </on_failure>
+    </error_handling>
+
+  </jobp>
+
+</uc4export>

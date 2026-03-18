@@ -1,0 +1,51 @@
+// ============================================================
+// customer_rollup.xfr
+// Ab Initio Transform: ROLLUP component
+// Maps to SQL equivalent: GROUP BY aggregation
+// Source: CUST_FEED_OUTPUT -> Target: CUST_COUNTRY_AGG
+// Complexity: MEDIUM
+// AI Analysis Note: Rollup = GROUP BY + COUNT/AVG in SQL
+// ============================================================
+
+// Group key: country_code + feed_date
+rollup_key {
+    country_code;
+    feed_date;
+}
+
+// Initialise accumulators before first record in group
+initialize() {
+    total_customers    := 0;
+    new_customers      := 0;
+    updated_customers  := 0;
+    quality_sum        := decimal(0);
+}
+
+// Accumulate for each record in the group
+// SQL equivalent:
+//   COUNT(*)                              AS total_customers,
+//   COUNT(CASE WHEN record_type='NEW')    AS new_customers,
+//   COUNT(CASE WHEN record_type='UPDATE') AS updated_customers,
+//   SUM(data_quality_score)               AS quality_sum
+accumulate(in CUST_FEED_INPUT rec) {
+    total_customers   += 1;
+
+    if (rec.record_type = "NEW")    { new_customers    += 1; }
+    if (rec.record_type = "UPDATE") { updated_customers += 1; }
+
+    quality_sum += decimal(rec.data_quality_score);
+}
+
+// Output one summary record per group
+// SQL equivalent: SELECT ... GROUP BY country_code, feed_date
+output(out CUST_COUNTRY_AGG agg_rec) {
+    agg_rec.country_code        := country_code;
+    agg_rec.feed_date           := feed_date;
+    agg_rec.total_customers     := total_customers;
+    agg_rec.new_customers       := new_customers;
+    agg_rec.updated_customers   := updated_customers;
+    agg_rec.avg_quality_score   :=
+        if (total_customers > 0)
+            then quality_sum / decimal(total_customers)
+            else decimal(0);
+}
